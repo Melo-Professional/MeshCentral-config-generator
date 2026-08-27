@@ -1,8 +1,38 @@
 // Data Collection Functions
 
+// Collect array builder values
+function collectArrayBuilder(fullId) {
+    const builder = document.querySelector(`.array-builder[data-full-id="${fullId}"]`);
+    if (!builder) return undefined;
+    const items = [];
+    const itemInputs = builder.querySelectorAll('.array-item-input');
+    itemInputs.forEach(input => {
+        if (input.value && input.value.trim() !== '') {
+            const itemType = input.dataset.arrayItemType || 'string';
+            if (itemType === 'number' || itemType === 'integer') {
+                items.push(Number(input.value));
+            } else {
+                items.push(input.value);
+            }
+        }
+    });
+    if (items.length > 0) {
+        return items;
+    }
+    return null;
+}
+
 // Collect top-level leaf values
 function collectTopLeaf(fullId) {
     let val;
+    const builder = document.querySelector(`.array-builder[data-full-id="${fullId}"]`);
+    if (builder) {
+        val = collectArrayBuilder(fullId);
+        if (val === null || val === undefined) {
+            return undefined;
+        }
+        return val;
+    }
     const element = document.getElementById(fullId);
     if (element) {
         if (element.classList && element.classList.contains('three-state-toggle')) {
@@ -11,7 +41,14 @@ function collectTopLeaf(fullId) {
                 val = state === 'true';
             }
         } else if (element.value && element.value.trim() !== '' && element.id !== 'newDomainName') {
-            if (element.type === 'number') {
+            const activeType = element.dataset.activeType;
+            if (activeType === 'array') {
+                val = collectArrayBuilder(fullId);
+            } else if (activeType === 'number' || activeType === 'integer') {
+                val = Number(element.value);
+            } else if (activeType === 'string') {
+                val = element.value;
+            } else if (element.type === 'number') {
                 val = Number(element.value);
             } else if (element.tagName.toLowerCase() === 'textarea') {
                 try {
@@ -22,8 +59,9 @@ function collectTopLeaf(fullId) {
             } else {
                 val = element.value;
             }
-            // For top-level, we don't have prop, so simple conversion
-            val = convertStringValue(val, { type: 'string' }); // default to string, but convert booleans and integers and json
+            if (activeType !== 'string' && activeType !== 'array' && activeType !== 'number' && activeType !== 'integer') {
+                val = convertStringValue(val, { type: 'string' });
+            }
         }
     }
     return val;
@@ -74,36 +112,67 @@ function collectSub(props, parentKey) {
         }
 
         if ((prop.type === 'object' || (Array.isArray(prop.type) && prop.type.includes('object'))) && prop.properties) {
-            const subSub = collectSub(prop.properties, fullId);
-            if (Object.keys(subSub).length > 0) {
-                sub[key] = subSub;
+            // Check for boolean toggle in header
+            const toggleElement = document.getElementById(fullId);
+            if (toggleElement && toggleElement.classList.contains('three-state-toggle')) {
+                const state = toggleElement.dataset.state;
+                if (state === 'true' || state === 'false') {
+                    sub[key] = state === 'true';
+                } else {
+                    // Toggle is 'unset', collect sub-properties
+                    const subSub = collectSub(prop.properties, fullId);
+                    if (Object.keys(subSub).length > 0) {
+                        sub[key] = subSub;
+                    }
+                }
+            } else {
+                const subSub = collectSub(prop.properties, fullId);
+                if (Object.keys(subSub).length > 0) {
+                    sub[key] = subSub;
+                }
             }
         } else {
             let val;
-            const element = document.getElementById(fullId);
-            if (element) {
-                if (element.classList && element.classList.contains('three-state-toggle')) {
-                    const state = element.dataset.state;
-                    if (state !== 'unset') {
-                        val = state === 'true';
-                    }
-                } else if (element.value && element.value.trim() !== '' && element.id !== 'newDomainName') {
-                    if (element.type === 'number') {
-                        val = Number(element.value);
-                    } else if (element.tagName.toLowerCase() === 'textarea') {
-                        try {
-                            val = JSON.parse(element.value);
-                        } catch (e) {
+            const builder = document.querySelector(`.array-builder[data-full-id="${fullId}"]`);
+            if (builder) {
+                val = collectArrayBuilder(fullId);
+                if (val !== null && val !== undefined) {
+                    sub[key] = val;
+                }
+            } else {
+                const element = document.getElementById(fullId);
+                if (element) {
+                    if (element.classList && element.classList.contains('three-state-toggle')) {
+                        const state = element.dataset.state;
+                        if (state !== 'unset') {
+                            val = state === 'true';
+                        }
+                    } else if (element.value && element.value.trim() !== '' && element.id !== 'newDomainName') {
+                        const activeType = element.dataset.activeType;
+                        if (activeType === 'array') {
+                            val = collectArrayBuilder(fullId);
+                        } else if (activeType === 'number' || activeType === 'integer') {
+                            val = Number(element.value);
+                        } else if (activeType === 'string') {
+                            val = element.value;
+                        } else if (element.type === 'number') {
+                            val = Number(element.value);
+                        } else if (element.tagName.toLowerCase() === 'textarea') {
+                            try {
+                                val = JSON.parse(element.value);
+                            } catch (e) {
+                                val = element.value;
+                            }
+                        } else {
                             val = element.value;
                         }
-                    } else {
-                        val = element.value;
+                        if (activeType !== 'string' && activeType !== 'array' && activeType !== 'number' && activeType !== 'integer') {
+                            val = convertStringValue(val, prop);
+                        }
                     }
-                    // Convert string values
-                    val = convertStringValue(val, prop);
                 }
             }
-            if (val !== undefined) {
+            if (val !== undefined && val !== null) {
                 sub[key] = val;
             }
         }
@@ -245,6 +314,18 @@ function cleanupEmptyFields(obj, props, parentKey) {
 
         // Object recursion
         if ((prop.type === 'object' || (Array.isArray(prop.type) && prop.type.includes('object'))) && prop.properties) {
+            // Check for boolean toggle
+            const toggleElement = document.getElementById(fullId);
+            if (toggleElement && toggleElement.classList.contains('three-state-toggle')) {
+                if (toggleElement.dataset.state === 'unset') {
+                    // Toggle is unset, check if sub-properties are empty
+                    if (!obj[key] || Object.keys(obj[key]).length === 0) {
+                        delete obj[key];
+                    }
+                }
+                // If toggle is true/false, keep the value
+                return;
+            }
             if (obj[key]) {
                 cleanupEmptyFields(obj[key], prop.properties, fullId);
                 if (Object.keys(obj[key]).length === 0) {
@@ -255,17 +336,29 @@ function cleanupEmptyFields(obj, props, parentKey) {
         }
 
         // Leaf values
-        const element = document.getElementById(fullId);
-        if (element) {
-            let isEmpty = false;
-            if (element.classList.contains('three-state-toggle')) {
-                if (element.dataset.state === 'unset') isEmpty = true;
-            } else if (element.value !== undefined && element.value.trim() === '') {
-                isEmpty = true;
-            }
-
-            if (isEmpty) {
+        const builder = document.querySelector(`.array-builder[data-full-id="${fullId}"]`);
+        if (builder) {
+            const items = builder.querySelectorAll('.array-item-input');
+            let hasItems = false;
+            items.forEach(input => {
+                if (input.value && input.value.trim() !== '') hasItems = true;
+            });
+            if (!hasItems) {
                 delete obj[key];
+            }
+        } else {
+            const element = document.getElementById(fullId);
+            if (element) {
+                let isEmpty = false;
+                if (element.classList.contains('three-state-toggle')) {
+                    if (element.dataset.state === 'unset') isEmpty = true;
+                } else if (element.value !== undefined && element.value.trim() === '') {
+                    isEmpty = true;
+                }
+
+                if (isEmpty) {
+                    delete obj[key];
+                }
             }
         }
     });

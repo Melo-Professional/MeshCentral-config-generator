@@ -320,6 +320,61 @@ h1 {
     background: #555;
 }
 
+.field-row select.type-selector-select {
+    background: var(--input-bg, #1e1e2f);
+    color: var(--input-text, #0f0);
+    border: 1px solid var(--input-border, #55555530);
+    border-radius: 4px;
+    padding: 4px 6px;
+    flex: 0 0 auto;
+    width: 90px;
+    margin-left: 6px;
+    font-size: 0.85em;
+    cursor: pointer;
+}
+
+.field-row select.type-selector-select option {
+    background: var(--input-bg, #1e1e2f);
+    color: var(--input-text, #0f0);
+}
+
+.array-builder {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+
+.array-item-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.array-item-row input.array-item-input {
+    background: var(--input-bg, #1e1e2f);
+    color: var(--input-text, #0f0);
+    border: 1px solid var(--input-border, #55555530);
+    border-radius: 4px;
+    padding: 4px 6px;
+    flex: 1;
+}
+
+.add-array-item-btn {
+    background: #444;
+    color: #ddd;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 0.8em;
+    align-self: flex-start;
+}
+
+.add-array-item-btn:hover {
+    background: #555;
+}
+
 .field-row .badge {
     font-size: 0.6em;
     background: var(---background-badge);
@@ -339,6 +394,17 @@ h1 {
     user-select: none;
 }
 
+.field-description {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-left: 10px;
+    color: #888;
+    font-size: 0.85em;
+    user-select: none;
+}
+
 .three-state-toggle {
     user-select: none;
 }
@@ -350,6 +416,11 @@ h1 {
     cursor: pointer;
     font-size: 0.7em;
     opacity: 0.9;
+}
+
+.section .header .three-state-toggle {
+    margin-left: auto;
+    margin-right: 10px;
 }
 
 /* === Three State Toggle === */
@@ -728,6 +799,22 @@ h1 {
         margin-left: 0;
         margin-top: 5px;
         padding: 8px;
+    }
+
+    /* Array builder mobile */
+    .array-item-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .array-item-row input.array-item-input {
+        margin-left: 0;
+        margin-top: 5px;
+    }
+
+    .add-array-item-btn {
+        margin-left: 0;
+        margin-top: 5px;
     }
 
     /* Adjust version selector on mobile */

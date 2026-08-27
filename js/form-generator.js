@@ -225,6 +225,7 @@ function generateForm(props, parentKey, container, level = 0, expand = false) {
 
             container.appendChild(section);
         } else if ((prop.type === 'object' || (Array.isArray(prop.type) && prop.type.includes('object'))) && prop.properties) {
+            const fullId = parentKey ? parentKey + '.' + key : key;
             const section = document.createElement('div'); section.className = 'section';
             const header = document.createElement('div'); header.className = 'header';
             const title = document.createElement('div'); title.className = 'title';
@@ -244,11 +245,59 @@ function generateForm(props, parentKey, container, level = 0, expand = false) {
             content.style.display = expand ? 'flex' : 'none';
             header.onclick = () => { content.style.display = content.style.display === 'none' ? 'flex' : 'none'; };
             section.appendChild(header); section.appendChild(content);
-            const subParentKey = parentKey ? parentKey + '.' + key : key;
+
+            // Check if boolean is in the type array
+            const schemaTypes = Array.isArray(prop.type) ? prop.type : [prop.type];
+            const hasBoolean = schemaTypes.includes('boolean');
+            if (hasBoolean) {
+                const toggle = document.createElement('div');
+                toggle.className = 'three-state-toggle';
+                toggle.id = fullId;
+                toggle.dataset.state = 'unset';
+                toggle.tabIndex = 0;
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'label';
+                labelSpan.textContent = 'unset';
+                toggle.appendChild(labelSpan);
+                const toggleState = function (e) {
+                    e.stopPropagation();
+                    const states = ['unset', 'true', 'false'];
+                    let idx = states.indexOf(toggle.dataset.state);
+                    let next = states[(idx + 1) % 3];
+                    toggle.dataset.state = next;
+                    labelSpan.textContent = next;
+                    updatePreview();
+                };
+                toggle.addEventListener('click', toggleState);
+                toggle.addEventListener('keydown', function (e) {
+                    if (e.key === ' ' || e.key === 'Enter') {
+                        e.preventDefault();
+                        toggleState(e);
+                    }
+                });
+                header.appendChild(toggle);
+            }
+
+            const subParentKey = fullId;
             generateForm(prop.properties, subParentKey, content, level + 1, false);
             container.appendChild(section);
         } else {
             const row = document.createElement('div'); row.className = 'field-row';
+
+            let schemaTypes = [];
+            if (Array.isArray(prop.type)) {
+                schemaTypes = prop.type;
+            } else if (typeof prop.type === 'string') {
+                schemaTypes = prop.type.split('|').map(t => t.trim());
+            }
+            let hasMultiType = schemaTypes.length > 1;
+            let availableTypes = [];
+            if (hasMultiType) {
+                const validTypes = ['string', 'number', 'integer', 'array', 'boolean'];
+                availableTypes = schemaTypes.filter(t => validTypes.includes(t));
+            }
+            let showTypeSelector = hasMultiType && availableTypes.length > 1;
+            let isOnlyBoolean = !showTypeSelector && (prop.type === 'boolean' || schemaTypes.includes('boolean'));
 
             const labelContainer = document.createElement('div');
             labelContainer.className = 'field-label-container';
@@ -265,6 +314,21 @@ function generateForm(props, parentKey, container, level = 0, expand = false) {
                 ti.onmouseenter = e => positionTooltip(e, tooltip, prop.description);
                 ti.onmouseleave = () => { tooltip.style.display = 'none'; };
                 labelContainer.appendChild(ti);
+                
+                if (isOnlyBoolean) {
+                    const descSpan = document.createElement('span');
+                    descSpan.className = 'field-description';
+                    descSpan.textContent = prop.description;
+                    descSpan.style.maxWidth = '300px';
+                    descSpan.style.overflow = 'hidden';
+                    descSpan.style.textOverflow = 'ellipsis';
+                    descSpan.style.whiteSpace = 'nowrap';
+                    descSpan.style.marginLeft = '10px';
+                    descSpan.style.color = '#888';
+                    descSpan.style.fontSize = '0.85em';
+                    descSpan.title = prop.description;
+                    labelContainer.appendChild(descSpan);
+                }
             }
 
             row.appendChild(labelContainer);
@@ -272,47 +336,140 @@ function generateForm(props, parentKey, container, level = 0, expand = false) {
             let input;
             const fullId = parentKey ? parentKey + '.' + key : key;
             let placeholder = prop.description || 'Value';
+            let activeType = 'string';
+            let showGenerateKeyBtn = true;
 
-            if (prop.type === 'boolean' || (Array.isArray(prop.type) && prop.type.includes('boolean'))) {
-                const toggle = document.createElement('div'); toggle.className = 'three-state-toggle'; toggle.id = fullId; toggle.dataset.state = 'unset'; toggle.tabIndex = 0;
-                const labelSpan = document.createElement('span'); labelSpan.className = 'label'; labelSpan.textContent = 'unset';
-                toggle.appendChild(labelSpan);
-                const toggleState = function () {
-                    const states = ['unset', 'true', 'false'];
-                    let idx = states.indexOf(toggle.dataset.state);
-                    let next = states[(idx + 1) % 3];
-                    toggle.dataset.state = next;
-                    labelSpan.textContent = next;
+            const createInputForType = function (type, description) {
+                let el;
+                let ph = placeholder;
+                if (type === 'boolean') {
+                    const toggle = document.createElement('div');
+                    toggle.className = 'three-state-toggle';
+                    toggle.id = fullId;
+                    toggle.dataset.state = 'unset';
+                    toggle.tabIndex = 0;
+                    const labelSpan = document.createElement('span');
+                    labelSpan.className = 'label';
+                    labelSpan.textContent = 'unset';
+                    toggle.appendChild(labelSpan);
+                    const toggleState = function () {
+                        const states = ['unset', 'true', 'false'];
+                        let idx = states.indexOf(toggle.dataset.state);
+                        let next = states[(idx + 1) % 3];
+                        toggle.dataset.state = next;
+                        labelSpan.textContent = next;
+                        updatePreview();
+                    };
+                    toggle.addEventListener('click', toggleState);
+                    toggle.addEventListener('keydown', function (e) {
+                        if (e.key === ' ' || e.key === 'Enter') {
+                            e.preventDefault();
+                            toggleState();
+                        }
+                    });
+                    return toggle;
+                } else if (type === 'string') {
+                    el = document.createElement('input');
+                    el.type = 'text';
+                    el.id = fullId;
+                } else if (type === 'number') {
+                    el = document.createElement('input');
+                    el.type = 'number';
+                    el.id = fullId;
+                } else if (type === 'integer') {
+                    el = document.createElement('input');
+                    el.type = 'number';
+                    el.id = fullId;
+                    el.step = '1';
+                } else if (type === 'array') {
+                    el = document.createElement('textarea');
+                    el.id = fullId;
+                    ph = prop.description || 'JSON array';
+                } else {
+                    el = document.createElement('textarea');
+                    el.id = fullId;
+                }
+                el.placeholder = ph;
+                el.dataset.activeType = type;
+                el.oninput = updatePreview;
+                return el;
+            };
+
+            if (prop.type === 'boolean' || isOnlyBoolean) {
+                input = createInputForType('boolean', prop.description);
+                row.appendChild(input);
+            } else if (showTypeSelector) {
+                activeType = availableTypes[0];
+                if (activeType === 'array') {
+                    showGenerateKeyBtn = false;
+                    buildArrayUI(prop, fullId, row);
+                } else {
+                    input = createInputForType(activeType, prop.description);
+                    row.appendChild(input);
+                }
+                const select = document.createElement('select');
+                select.className = 'type-selector-select';
+                select.dataset.fullId = fullId;
+                availableTypes.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t;
+                    opt.textContent = t;
+                    if (t === activeType) opt.selected = true;
+                    select.appendChild(opt);
+                });
+                select.onchange = function () {
+                    const newType = this.value;
+                    const oldEl = document.getElementById(fullId);
+                    if (oldEl) oldEl.remove();
+                    const existingBuilder = row.querySelector('.array-builder');
+                    if (existingBuilder) existingBuilder.remove();
+                    // Remove any existing Generate Key button
+                    const existingGenBtn = row.querySelector('.generate-key-btn');
+                    if (existingGenBtn) existingGenBtn.remove();
+                    activeType = newType;
+                    if (newType === 'array') {
+                        showGenerateKeyBtn = false;
+                        buildArrayUI(prop, fullId, row);
+                    } else {
+                        showGenerateKeyBtn = true;
+                        const newEl = createInputForType(newType, prop.description);
+                        row.appendChild(newEl);
+                        // Add Generate Key button if needed
+                        if (schemaTypes.includes('string') && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key')) && !key.toLowerCase().includes('cert')) {
+                            const genBtn = document.createElement('button');
+                            genBtn.textContent = 'Generate Key';
+                            genBtn.className = 'generate-key-btn';
+                            genBtn.onclick = e => { e.preventDefault(); newEl.value = randomKey(); updatePreview(); };
+                            row.appendChild(genBtn);
+                        }
+                    }
                     updatePreview();
                 };
-                toggle.addEventListener('click', toggleState);
-                toggle.addEventListener('keydown', function (e) {
-                    if (e.key === ' ' || e.key === 'Enter') {
-                        e.preventDefault();
-                        toggleState();
-                    }
-                });
-                row.appendChild(toggle);
-            } else {
-                if (prop.type === 'string' || (Array.isArray(prop.type) && prop.type.includes('string'))) {
-                    input = document.createElement('input'); input.type = 'text'; input.id = fullId;
-                } else if (prop.type === 'number' || (Array.isArray(prop.type) && prop.type.includes('number'))) {
-                    input = document.createElement('input'); input.type = 'number'; input.id = fullId;
-                } else if (prop.type === 'integer' || (Array.isArray(prop.type) && prop.type.includes('integer'))) {
-                    input = document.createElement('input'); input.type = 'number'; input.id = fullId; input.step = '1';
-                } else if (prop.type === 'array' || (Array.isArray(prop.type) && prop.type.includes('array'))) {
-                    input = document.createElement('textarea'); input.id = fullId;
-                    placeholder = prop.description || 'JSON array';
+                const labelContainer = row.querySelector('.field-label-container');
+                if (labelContainer) {
+                    row.insertBefore(select, labelContainer.nextSibling);
                 } else {
-                    input = document.createElement('textarea'); input.id = fullId;
+                    row.insertBefore(select, row.firstChild);
                 }
-                input.placeholder = placeholder;
-                input.oninput = updatePreview;
+            } else if (schemaTypes.includes('string')) {
+                input = createInputForType('string', prop.description);
+                row.appendChild(input);
+            } else if (schemaTypes.includes('number')) {
+                input = createInputForType('number', prop.description);
+                row.appendChild(input);
+            } else if (schemaTypes.includes('integer')) {
+                input = createInputForType('integer', prop.description);
+                row.appendChild(input);
+            } else if (schemaTypes.includes('array')) {
+                buildArrayUI(prop, fullId, row);
+            } else {
+                input = createInputForType('string', prop.description);
                 row.appendChild(input);
             }
 
-            if (prop.type === 'string' && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key')) && !key.toLowerCase().includes('cert')) {
+            if (showGenerateKeyBtn && schemaTypes.includes('string') && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key')) && !key.toLowerCase().includes('cert')) {
                 const genBtn = document.createElement('button'); genBtn.textContent = 'Generate Key';
+                genBtn.className = 'generate-key-btn';
                 genBtn.onclick = e => { e.preventDefault(); input.value = randomKey(); updatePreview(); };
                 row.appendChild(genBtn);
             }
@@ -323,6 +480,85 @@ function generateForm(props, parentKey, container, level = 0, expand = false) {
 
 // CustomFiles management functions
 let customFileSetCounter = 0;
+
+// Build interactive array UI for array-type properties
+function buildArrayUI(prop, fullId, container) {
+    const builder = document.createElement('div');
+    builder.className = 'array-builder';
+    builder.dataset.fullId = fullId;
+    builder.dataset.arrayType = (prop.items && prop.items.type) || 'string';
+    builder.dataset.shouldGenerateKey = shouldGenerateKey(fullId) ? 'true' : 'false';
+
+    const addItemBtn = document.createElement('button');
+    addItemBtn.textContent = 'Add Item';
+    addItemBtn.className = 'add-array-item-btn';
+    addItemBtn.onclick = () => {
+        addArrayItem(builder, prop, fullId);
+        updatePreview();
+    };
+    builder.appendChild(addItemBtn);
+
+    if (prop.default && Array.isArray(prop.default) && prop.default.length > 0) {
+        prop.default.forEach(val => {
+            addArrayItem(builder, prop, fullId, val);
+        });
+    }
+
+    container.appendChild(builder);
+}
+
+function shouldGenerateKey(fullId) {
+    const key = fullId.split('.').pop();
+    return key.toLowerCase().includes('secret') || key.toLowerCase().includes('key');
+}
+
+function addArrayItem(builder, prop, fullId, value) {
+    const itemType = (prop.items && prop.items.type) || 'string';
+    const itemRow = document.createElement('div');
+    itemRow.className = 'array-item-row';
+
+    const input = document.createElement('input');
+    input.className = 'array-item-input';
+    input.dataset.arrayItemType = itemType;
+    if (value !== undefined) {
+        input.value = value;
+    }
+    if (itemType === 'number' || itemType === 'integer') {
+        input.type = 'number';
+        if (itemType === 'integer') input.step = '1';
+    } else {
+        input.type = 'text';
+    }
+    input.placeholder = prop.description || 'Enter value';
+    input.oninput = updatePreview;
+
+    if (builder.dataset.shouldGenerateKey === 'true' && (itemType === 'string' || !itemType)) {
+        const genBtn = document.createElement('button');
+        genBtn.textContent = 'Generate';
+        genBtn.onclick = e => {
+            e.preventDefault();
+            input.value = randomKey();
+            updatePreview();
+        };
+        itemRow.appendChild(genBtn);
+    }
+
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = 'Remove';
+    removeBtn.onclick = () => {
+        itemRow.remove();
+        updatePreview();
+    };
+
+    itemRow.appendChild(input);
+    itemRow.appendChild(removeBtn);
+    builder.appendChild(itemRow);
+
+    const addItemBtn = builder.querySelector('.add-array-item-btn');
+    if (addItemBtn) {
+        builder.insertBefore(addItemBtn, itemRow.nextSibling);
+    }
+}
 
 // Helper function to create a field row with badge and tooltip
 function createFieldRow(label, fieldType, dataField, placeholder, description) {

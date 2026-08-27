@@ -107,11 +107,24 @@ function populateForm(data) {
     toggles.forEach(t => {
         const val = getNestedValue(data, t.id, true);
         let state = 'unset';
-        if (val === true) state = 'true';
-        else if (val === false) state = 'false';
+        if (typeof val === 'boolean') {
+            state = val ? 'true' : 'false';
+        }
         t.dataset.state = state;
         t.querySelector('.label').textContent = state;
         expandPathTo(t);
+    });
+    // Array builders
+    const arrayBuilders = document.querySelectorAll('.array-builder');
+    arrayBuilders.forEach(builder => {
+        const fullId = builder.dataset.fullId;
+        const val = getNestedValue(data, fullId, true);
+        if (Array.isArray(val) && val.length > 0) {
+            builder.querySelectorAll('.array-item-row').forEach(row => row.remove());
+            val.forEach(item => {
+                addArrayItem(builder, { items: { type: builder.dataset.arrayType } }, item);
+            });
+        }
     });
     // Special for sms
     const providerSelect = document.getElementById('sms.provider');
